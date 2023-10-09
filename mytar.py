@@ -1,3 +1,5 @@
+#!/usr/local/bin/python3
+
 import os
 import sys
 
@@ -60,19 +62,32 @@ def create(files):
 def extract():
     buffer = b""
     while True:
-        data = os.read(0, 1024)  # Read from stdin (file descriptor 0).
+        data = os.read(0, 1024)
         if not data:
             break
         buffer += data
 
-        # Continue until all data in the buffer is processed.
-        while buffer:
-            filename, content = deframer(buffer)
+        while len(buffer) > 10:  # Minimum frame length is 10 (2 for filename length and 8 for content length).
+            filename_length = int.from_bytes(buffer[:2], 'big')
+            
+            # Check if we have enough data for a full frame.
+            if len(buffer) < 2 + filename_length + 8:
+                break
+
+            filename = buffer[2:2 + filename_length].decode(errors='ignore')  # Use 'ignore' to handle decode errors.
+            content_length = int.from_bytes(buffer[2 + filename_length:10 + filename_length], 'big')
+            
+            # Check if we have all the content.
+            if len(buffer) < 10 + filename_length + content_length:
+                break
+
+            content = buffer[10 + filename_length:10 + filename_length + content_length]
+            
             fd = os.open(filename, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
             os.write(fd, content)
             os.close(fd)
-            frame_length = 10 + len(filename.encode()) + len(content)
-            buffer = buffer[frame_length:]
+
+            buffer = buffer[10 + filename_length + content_length:]
 
 # Reports errors by writing the message to stderr.
 def report_error(message):
